@@ -1,0 +1,10 @@
+bin/
+obj/
+.vs/
+.vscode/
+*.user
+[Bb]in/
+[Oo]bj/
+*.DotSettings.user
+TestResults/
+.idea/
