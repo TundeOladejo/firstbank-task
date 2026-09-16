@@ -76,6 +76,18 @@ builder.Services.AddRateLimiter(options =>
 
 // ---- Controllers + Swagger ----
 builder.Services.AddControllers();
+
+// Route [ApiController] model-validation failures through the same RFC 7807 shape as every other
+// error, instead of ASP.NET's default (differently-shaped) validation response.
+builder.Services.Configure<Microsoft.AspNetCore.Mvc.ApiBehaviorOptions>(options =>
+{
+    // Write validation failures through IProblemDetailsService (the same writer the exception
+    // handler uses) so the media type is application/problem+json and the shape is identical.
+    options.InvalidModelStateResponseFactory = ctx =>
+        new NovaWallet.Api.Infrastructure.ProblemResult(
+            NovaWallet.Api.Infrastructure.ProblemFactory.CreateValidation(ctx.HttpContext, ctx.ModelState));
+});
+
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {

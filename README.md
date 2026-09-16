@@ -144,10 +144,29 @@ the chain and is detectable.
 
 ### Errors
 
-All errors return **RFC 7807 Problem Details** with a stable `type`, a machine-readable `title`
-(error code), a human `detail`, and the request `correlationId`. Domain failures map to specific
-codes (`insufficient_funds` → 422, `daily_limit_exceeded` → 422, `idempotency_key_reused` → 409,
-`wallet_not_found` → 404, `validation_error` → 400).
+**Every** error — domain failures, model validation, malformed JSON, unhandled faults — returns the
+same **RFC 7807 Problem Details** shape (`application/problem+json`), built in one place
+(`ProblemFactory`). Each response carries a stable `type` URI, a machine-readable `title` (error
+code you can branch on), a human `detail`, a field-level `errors` map for validation failures, and
+`correlationId` / `traceId` / `timestamp` extensions for tracing.
+
+The mapping is deliberate about fault ownership — client errors are 4xx and logged at Warning, our
+faults are 5xx and logged at Error with the stack trace:
+
+| Situation | Status | `title` (code) |
+| --- | --- | --- |
+| Model/field validation, malformed JSON | 400 | `validation_error`, `malformed_request` |
+| Missing/invalid bearer token | 401 | (challenge) |
+| Wallet not found | 404 | `wallet_not_found` |
+| Idempotency key reused with a different body | 409 | `idempotency_key_reused` |
+| Optimistic-concurrency loss (retryable) | 409 | `concurrency_conflict` |
+| Insufficient funds | 422 | `insufficient_funds` |
+| Daily limit exceeded | 422 | `daily_limit_exceeded` |
+| Same-wallet / cross-currency transfer | 422 | `same_wallet_transfer`, `currency_mismatch` |
+| Balance overflow guard | 422 | `amount_overflow` |
+| Datastore unreachable (retryable) | 503 | `database_unavailable` |
+| Client aborted the request | — | swallowed, logged at Info (no body) |
+| Anything unexpected | 500 | `internal_error` |
 
 ### Security
 

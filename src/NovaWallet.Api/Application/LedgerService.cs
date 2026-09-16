@@ -84,7 +84,7 @@ public class LedgerService(
         if (req.AmountKobo <= 0)
             throw LedgerException.Validation("amountKobo must be a positive integer number of kobo.");
         if (req.FromWalletId == req.ToWalletId)
-            throw LedgerException.Validation("Cannot transfer to the same wallet.");
+            throw LedgerException.SameWallet("Source and destination wallets must be different.");
 
         // Fast replay path outside the transaction.
         if (idempotencyKey is not null)
@@ -115,7 +115,7 @@ public class LedgerService(
             if (to is null) throw LedgerException.NotFound($"Destination wallet {req.ToWalletId} not found.");
 
             if (from.Currency != to.Currency)
-                throw LedgerException.Validation("Cross-currency transfers are not supported.");
+                throw LedgerException.CurrencyMismatch("Cross-currency transfers are not supported.");
 
             // Daily outbound limit (per source wallet), computed over the current WAT day.
             var (dayStartUtc, dayEndUtc) = CurrentLimitWindowUtc();

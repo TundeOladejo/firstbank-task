@@ -15,4 +15,6 @@ public class LedgerException(int statusCode, string errorCode, string detail) : 
     public static LedgerException Validation(string detail) => new(400, "validation_error", detail);
     public static LedgerException Conflict(string detail) => new(409, "conflict", detail);
     public static LedgerException IdempotencyConflict(string detail) => new(409, "idempotency_key_reused", detail);
+    public static LedgerException CurrencyMismatch(string detail) => new(422, "currency_mismatch", detail);
+    public static LedgerException SameWallet(string detail) => new(422, "same_wallet_transfer", detail);
 }
