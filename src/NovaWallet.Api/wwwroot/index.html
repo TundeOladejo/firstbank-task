@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NovaWallet Console — FirstBank NovaPay</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:wght@600;700;900&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">🐘</div>
+      <div class="brand-text">
+        <span class="brand-name">FirstBank <b>NovaPay</b></span>
+        <span class="brand-sub">NovaWallet Ledger Console</span>
+      </div>
+    </div>
+    <nav class="topnav">
+      <a href="/swagger" target="_blank" rel="noopener">API docs</a>
+      <span id="authPill" class="pill pill-muted">Not signed in</span>
+    </nav>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <h1>Move money you can <span class="accent">trust</span>.</h1>
+      <p>A console for the NovaWallet ledger. Every action here hits the same secured API the panel
+        can test with Swagger or Postman — nothing is faked in the browser.</p>
+    </section>
+
+    <div class="grid">
+      <!-- Auth -->
+      <article class="card span-2">
+        <div class="card-head">
+          <h2>1 · Get a token</h2>
+          <span class="tag">JWT bearer</span>
+        </div>
+        <div class="row">
+          <label>Subject
+            <input id="authSubject" type="text" value="demo" placeholder="e.g. teller-01" />
+          </label>
+          <label>Customer id <span class="opt">(optional)</span>
+            <input id="authCustomer" type="text" placeholder="cust-123" />
+          </label>
+          <button class="btn" onclick="getToken()">Sign in</button>
+        </div>
+        <p class="hint">The token is held in this tab only and attached as <code>Authorization: Bearer</code> on every call below.</p>
+      </article>
+
+      <!-- Create wallet -->
+      <article class="card">
+        <div class="card-head"><h2>2 · Create wallet</h2></div>
+        <label>Customer id
+          <input id="cwCustomer" type="text" value="cust-1" />
+        </label>
+        <button class="btn" onclick="createWallet()">Create wallet</button>
+        <p class="hint">Starts at ₦0.00. The new wallet id is remembered for the fields below.</p>
+      </article>
+
+      <!-- Balance -->
+      <article class="card">
+        <div class="card-head"><h2>Balance</h2></div>
+        <label>Wallet id
+          <input id="balWallet" type="text" placeholder="wallet uuid" />
+        </label>
+        <button class="btn btn-ghost" onclick="getBalance()">Check balance</button>
+        <div id="balOut" class="balance-out"></div>
+      </article>
+
+      <!-- Credit -->
+      <article class="card">
+        <div class="card-head"><h2>3 · Credit wallet</h2></div>
+        <label>Wallet id
+          <input id="crWallet" type="text" placeholder="wallet uuid" />
+        </label>
+        <label>Amount (₦)
+          <input id="crAmount" type="number" min="0" step="0.01" value="10000" />
+        </label>
+        <label>Reference <span class="opt">(optional)</span>
+          <input id="crRef" type="text" placeholder="inbound NIP" />
+        </label>
+        <button class="btn" onclick="credit()">Credit</button>
+      </article>
+
+      <!-- Transfer -->
+      <article class="card span-2 card-feature">
+        <div class="card-head">
+          <h2>4 · Transfer</h2>
+          <span class="tag tag-gold">atomic · idempotent</span>
+        </div>
+        <div class="row">
+          <label>From wallet
+            <input id="tfFrom" type="text" placeholder="source uuid" />
+          </label>
+          <label>To wallet
+            <input id="tfTo" type="text" placeholder="destination uuid" />
+          </label>
+        </div>
+        <div class="row">
+          <label>Amount (₦)
+            <input id="tfAmount" type="number" min="0" step="0.01" value="4000" />
+          </label>
+          <label>Idempotency-Key
+            <div class="inline">
+              <input id="tfKey" type="text" placeholder="auto-generated" />
+              <button class="btn btn-mini" type="button" onclick="newKey()">New</button>
+            </div>
+          </label>
+        </div>
+        <label>Reference <span class="opt">(optional)</span>
+          <input id="tfRef" type="text" placeholder="rent" />
+        </label>
+        <button class="btn btn-primary" onclick="transfer()">Send transfer</button>
+        <p class="hint">Reuse the same key to see a safe replay; the daily cap is ₦500,000 per wallet.</p>
+      </article>
+
+      <!-- Statement / Audit -->
+      <article class="card span-2">
+        <div class="card-head">
+          <h2>5 · History</h2>
+          <div class="segmented">
+            <button id="tabStmt" class="seg active" onclick="switchTab('stmt')">Statement</button>
+            <button id="tabAudit" class="seg" onclick="switchTab('audit')">Audit trail</button>
+          </div>
+        </div>
+        <div class="row">
+          <label>Wallet id
+            <input id="hsWallet" type="text" placeholder="wallet uuid" />
+          </label>
+          <button class="btn btn-ghost" onclick="loadHistory()">Load</button>
+        </div>
+        <div id="historyOut" class="table-wrap"></div>
+      </article>
+    </div>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <footer class="foot">
+    NovaWallet Ledger Service · demo console · fictional scenario for evaluation only
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -15,10 +15,22 @@ The service and its datastore start with a single command:
 docker compose up --build
 ```
 
-Then open Swagger UI: **http://localhost:8080/swagger**
+Then open one of:
+
+- **Web console (UI):** http://localhost:8080/ — a demo dashboard to drive every endpoint
+- **Swagger UI:** http://localhost:8080/swagger — the raw OpenAPI spec for Postman/the panel
 
 The API runs on port `8080`; PostgreSQL on `5432`. Database migrations are applied automatically on
 startup, so the service is ready as soon as the container reports listening.
+
+### Web console
+
+A static single-page console is served at the app root (`wwwroot/index.html`). It lets you sign in
+for a token, create wallets, credit, transfer (with an idempotency key and a live "replayed"
+indicator), and browse the statement and hash-chained audit trail — all styled in the FirstBank
+navy/gold theme. It is purely a client of the same public `/api` endpoints: **nothing is faked in the
+browser, and the API stays fully open** to Swagger, Postman, and the panel's own tests. Amounts are
+entered in naira and converted to integer kobo in the client without floating-point (string math).
 
 ### Try it end to end
 
@@ -65,6 +77,7 @@ src/NovaWallet.Api
 ├── Auth/             JwtOptions, TokenService (mock issuer)
 ├── Infrastructure/   RFC 7807 exception handler, correlation-id middleware, outbox dispatcher
 ├── Controllers/      Auth, Wallets, Transfers
+├── wwwroot/          Static web console (index.html, styles.css, app.js)
 └── Program.cs        Composition root
 ```
 

@@ -111,6 +111,11 @@ if (!app.Environment.IsEnvironment("Testing"))
 app.UseExceptionHandler();
 app.UseMiddleware<CorrelationIdMiddleware>();
 
+// Serve the static web console (wwwroot/index.html) at the app root. This is purely a client of
+// the same public /api endpoints — the API remains fully open to Swagger, Postman, and the panel.
+app.UseDefaultFiles();
+app.UseStaticFiles();
+
 app.UseSwagger();
 app.UseSwaggerUI();
 
