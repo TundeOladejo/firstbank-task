@@ -25,12 +25,13 @@ startup, so the service is ready as soon as the container reports listening.
 
 ### Web console
 
-A static single-page console is served at the app root (`wwwroot/index.html`). It lets you sign in
-for a token, create wallets, credit, transfer (with an idempotency key and a live "replayed"
-indicator), and browse the statement and hash-chained audit trail — all styled in the FirstBank
-navy/gold theme. It is purely a client of the same public `/api` endpoints: **nothing is faked in the
-browser, and the API stays fully open** to Swagger, Postman, and the panel's own tests. Amounts are
-entered in naira and converted to integer kobo in the client without floating-point (string math).
+A static single-page **portal** is served at the app root (`wwwroot/`). It has a sidebar with
+sections — **Dashboard** (stat cards + quick actions), **Wallets** (create / credit / balance),
+**Transfer** (with an idempotency key and a live "replayed" indicator), and **History** (statement +
+hash-chained audit trail) — plus inline SVG icons throughout, all in the FirstBank navy/gold theme.
+It is purely a client of the same public `/api` endpoints: **nothing is faked in the browser, and the
+API stays fully open** to Swagger, Postman, and the panel's own tests. Amounts are entered in naira
+and converted to integer kobo in the client without floating-point (string/BigInt math).
 
 ### Try it end to end
 

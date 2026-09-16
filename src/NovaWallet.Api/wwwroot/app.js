@@ -4,25 +4,27 @@
 let token = null;
 let historyTab = "stmt";
 
-// ---- helpers ----
+const SECTIONS = {
+  dashboard: { title: "Dashboard", sub: "Overview of your NovaWallet activity" },
+  wallets:   { title: "Wallets", sub: "Create wallets, credit funds, and check balances" },
+  transfer:  { title: "Transfer", sub: "Move funds atomically between wallets" },
+  history:   { title: "History", sub: "Statement and append-only audit trail" },
+};
+
 const $ = (id) => document.getElementById(id);
 
+// ---- money helpers (string/BigInt math, no floating point) ----
 function nairaToKobo(naira) {
-  // Parse to kobo without floating-point drift: work on the string, not on a float.
   const s = String(naira).trim();
   if (!/^\d+(\.\d{1,2})?$/.test(s)) return null;
   const [whole, frac = ""] = s.split(".");
-  const koboFrac = (frac + "00").slice(0, 2);
-  return BigInt(whole) * 100n + BigInt(koboFrac);
+  return BigInt(whole) * 100n + BigInt((frac + "00").slice(0, 2));
 }
-
 function koboToNaira(kobo) {
   const n = BigInt(kobo);
   const sign = n < 0n ? "-" : "";
   const abs = n < 0n ? -n : n;
-  const whole = abs / 100n;
-  const frac = (abs % 100n).toString().padStart(2, "0");
-  return `${sign}₦${whole.toLocaleString("en-NG")}.${frac}`;
+  return `${sign}₦${(abs / 100n).toLocaleString("en-NG")}.${(abs % 100n).toString().padStart(2, "0")}`;
 }
 
 function toast(kind, title, detail) {
@@ -41,7 +43,6 @@ async function api(method, path, body, extraHeaders = {}) {
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
   if (!res.ok) {
-    // RFC 7807 Problem Details -> friendly message.
     const title = (data && (data.title || data.error)) || `HTTP ${res.status}`;
     const detail = (data && data.detail) || (typeof data === "string" ? data : "");
     const err = new Error(detail || title);
@@ -52,8 +53,61 @@ async function api(method, path, body, extraHeaders = {}) {
 }
 
 function requireToken() {
-  if (!token) { toast("err", "Sign in first", "Get a token in step 1."); return false; }
+  if (!token) { toast("err", "Sign in first", "Get a token to start."); return false; }
   return true;
+}
+
+// ---- navigation ----
+function go(section) {
+  Object.keys(SECTIONS).forEach((s) => { $(`s-${s}`).hidden = s !== section; });
+  document.querySelectorAll(".nav-item[data-section]").forEach((b) =>
+    b.classList.toggle("active", b.dataset.section === section));
+  $("pageTitle").textContent = SECTIONS[section].title;
+  $("pageSub").textContent = SECTIONS[section].sub;
+  if (section === "dashboard") refreshDashboard();
+}
+
+function setAuthed(subject, expiresAt) {
+  $("authBanner").hidden = true;
+  Object.keys(SECTIONS).forEach((s) => { if (s === "dashboard") $(`s-${s}`).hidden = false; });
+  $("accountName").textContent = subject;
+  $("accountMeta").textContent = "Signed in";
+  $("signOutBtn").hidden = false;
+  const pill = $("statusPill");
+  pill.className = "pill pill-live";
+  pill.innerHTML = `<span class="dot"></span> ${subject}`;
+  go("dashboard");
+}
+
+function signOut() {
+  token = null;
+  Object.keys(SECTIONS).forEach((s) => { $(`s-${s}`).hidden = true; });
+  $("authBanner").hidden = false;
+  $("accountName").textContent = "Not signed in";
+  $("accountMeta").textContent = "Get a token to start";
+  $("signOutBtn").hidden = true;
+  const pill = $("statusPill");
+  pill.className = "pill pill-muted";
+  pill.innerHTML = `<span class="dot"></span> Signed out`;
+  $("pageTitle").textContent = "Dashboard";
+  $("pageSub").textContent = SECTIONS.dashboard.sub;
+}
+
+// ---- dashboard ----
+let lastTransfer = null;
+async function refreshDashboard() {
+  const id = ($("balWallet").value || $("tfFrom").value || "").trim();
+  if (token && id) {
+    try {
+      const { data } = await api("GET", `/api/wallets/${id}/balance`);
+      $("statBalance").textContent = koboToNaira(data.balanceKobo);
+      $("statWallet").textContent = id;
+    } catch { $("statBalance").textContent = "—"; $("statWallet").textContent = "No wallet selected"; }
+  }
+  if (lastTransfer) {
+    $("statTransfer").textContent = koboToNaira(lastTransfer.amountKobo);
+    $("statTransferFoot").textContent = lastTransfer.replayed ? "replayed (idempotent)" : "completed";
+  }
 }
 
 // ---- actions ----
@@ -63,9 +117,7 @@ async function getToken() {
     const customerId = $("authCustomer").value || null;
     const { data } = await api("POST", "/api/auth/token", { subject, customerId });
     token = data.accessToken;
-    const pill = $("authPill");
-    pill.textContent = `Signed in · ${subject}`;
-    pill.className = "pill pill-live";
+    setAuthed(subject, data.expiresAt);
     toast("ok", "Signed in", `Token valid until ${new Date(data.expiresAt).toLocaleTimeString()}`);
   } catch (e) { toast("err", "Sign in failed", e.message); }
 }
@@ -73,9 +125,7 @@ async function getToken() {
 async function createWallet() {
   if (!requireToken()) return;
   try {
-    const customerId = $("cwCustomer").value;
-    const { data } = await api("POST", "/api/wallets", { customerId });
-    // Remember the wallet id across the relevant fields for convenience.
+    const { data } = await api("POST", "/api/wallets", { customerId: $("cwCustomer").value });
     ["balWallet", "crWallet", "tfFrom", "hsWallet"].forEach((id) => { if (!$(id).value) $(id).value = data.walletId; });
     if (!$("tfTo").value && $("tfFrom").value !== data.walletId) $("tfTo").value = data.walletId;
     toast("ok", "Wallet created", data.walletId);
@@ -118,6 +168,7 @@ async function transfer() {
       reference: $("tfRef").value || null,
     }, { "Idempotency-Key": $("tfKey").value });
     const replayed = headers.get("Idempotent-Replayed") === "true";
+    lastTransfer = { amountKobo: kobo.toString(), replayed };
     toast("ok", replayed ? "Replayed (idempotent)" : "Transfer complete",
       `${koboToNaira(kobo)} · new source balance ${koboToNaira(data.fromBalanceKobo)}`);
     if ($("balWallet").value.trim() === $("tfFrom").value.trim()) getBalance();
@@ -132,8 +183,11 @@ function switchTab(tab) {
 }
 
 function typeChip(type) {
-  const map = { Credit: "chip-credit", TransferIn: "chip-in", TransferOut: "chip-out" };
-  return `<span class="type-chip ${map[type] || ""}">${type}</span>`;
+  const map = {
+    Credit: ["chip-credit", "#i-down"], TransferIn: ["chip-in", "#i-down"], TransferOut: ["chip-out", "#i-send"],
+  };
+  const [cls, icon] = map[type] || ["", "#i-history"];
+  return `<span class="type-chip ${cls}"><svg class="ic"><use href="${icon}"/></svg>${type}</span>`;
 }
 
 async function loadHistory() {
@@ -159,7 +213,7 @@ async function loadHistory() {
         data.items.map((a) => `<tr>
           <td>${a.id}</td>
           <td>${new Date(a.createdAt).toLocaleString()}</td>
-          <td>${typeChip(a.action.replace("TRANSFER_", "Transfer").replace("CREDIT", "Credit"))}</td>
+          <td>${typeChip(a.action.replace("TRANSFER_IN", "TransferIn").replace("TRANSFER_OUT", "TransferOut").replace("CREDIT", "Credit"))}</td>
           <td>${koboToNaira(a.balanceBeforeKobo)}</td>
           <td>${koboToNaira(a.balanceAfterKobo)}</td>
           <td><code title="${a.entryHash}">${a.entryHash.slice(0, 12)}…</code></td></tr>`).join("")
