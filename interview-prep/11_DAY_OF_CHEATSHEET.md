@@ -9,8 +9,10 @@ Print this or keep it visible beside your screen.
 ```bash
 # In terminal 1 — start the service
 cd /Users/babz/Desktop/firstbank-task
-docker compose down -v        # clean slate
-docker compose up --build     # start fresh
+docker compose up --build           # data persists from last session ✓
+
+# ONLY if you want a completely empty database:
+# docker compose down -v && docker compose up --build
 
 # In terminal 2 — ready to run tests
 cd /Users/babz/Desktop/firstbank-task

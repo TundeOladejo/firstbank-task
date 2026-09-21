@@ -31,6 +31,10 @@ cd /Users/babz/Desktop/firstbank-task
 docker compose up --build
 ```
 
+> **Your data persists between restarts.** The database is stored in a Docker named volume
+> called `pgdata`. Stopping and restarting the containers does not wipe it.
+> Only `docker compose down -v` deletes it — avoid that command unless you want a clean slate.
+
 While it starts, say this:
 
 > "The service starts with a single `docker compose up` command as required.
@@ -265,6 +269,7 @@ Here is the exact answer:
 - [ ] Terminal open in `/Users/babz/Desktop/firstbank-task`
 - [ ] Docker Desktop running
 - [ ] Browser ready to open `http://localhost:8080`
-- [ ] Run `docker compose down -v` first to start clean
+- [ ] Run `docker compose up --build` to start (data persists from last session)
+- [ ] If you want a completely clean database: `docker compose down -v` THEN `docker compose up --build`
 - [ ] Have the concept files open in another window for reference
 - [ ] Know Alice and Bob's wallet IDs during the demo (or just let the UI fill them in)
