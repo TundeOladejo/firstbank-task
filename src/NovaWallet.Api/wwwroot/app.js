@@ -104,15 +104,32 @@ function requireToken() {
   return true;
 }
 
+// ── sidebar drawer (mobile) ───────────────────────────────────────────────────
+function toggleSidebar() {
+  const sidebar = document.querySelector(".sidebar");
+  const overlay = $("sidebarOverlay");
+  const open    = sidebar.classList.toggle("open");
+  overlay.classList.toggle("open", open);
+  document.body.style.overflow = open ? "hidden" : "";
+}
+
+function closeSidebar() {
+  const sidebar = document.querySelector(".sidebar");
+  const overlay = $("sidebarOverlay");
+  sidebar.classList.remove("open");
+  overlay.classList.remove("open");
+  document.body.style.overflow = "";
+}
+
 // ── navigation ───────────────────────────────────────────────────────────────
 
 function go(section) {
   Object.keys(SECTIONS).forEach((s) => { $(`s-${s}`).hidden = s !== section; });
-  document.querySelectorAll(".nav-item[data-section]").forEach((b) =>
+  document.querySelectorAll(".nav-item[data-section], .sidenav-item[data-section]").forEach((b) =>
     b.classList.toggle("active", b.dataset.section === section));
   $("pageTitle").textContent = SECTIONS[section].title;
   $("pageSub").textContent   = SECTIONS[section].sub;
-  // Wait for auth to settle before triggering data loads.
+  closeSidebar(); // close drawer on mobile after nav tap
   _authReady.then(() => {
     if (section === "dashboard") refreshDashboard();
     if (section === "wallets")   loadWallets();
@@ -137,6 +154,7 @@ function signOut() {
   _subject = null;
   window._lastTransfer = null;
   clearSession();
+  closeSidebar();
   Object.keys(SECTIONS).forEach((s) => { $(`s-${s}`).hidden = true; });
   $("authBanner").hidden = false;
   $("accountName").textContent = "Not signed in";

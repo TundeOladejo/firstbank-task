@@ -87,6 +87,14 @@
       <!-- Top bar -->
       <header class="topbar">
         <div class="topbar-left">
+          <!-- Hamburger: only visible on mobile, toggles the sidebar drawer -->
+          <button class="topbar-menu-btn" onclick="toggleSidebar()" aria-label="Menu">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <line x1="3" y1="6"  x2="21" y2="6"/>
+              <line x1="3" y1="12" x2="21" y2="12"/>
+              <line x1="3" y1="18" x2="21" y2="18"/>
+            </svg>
+          </button>
           <span id="pageTitle" class="topbar-title">Dashboard</span>
           <span id="pageSub" class="topbar-sub">Overview of your wallet activity</span>
         </div>
@@ -361,6 +369,8 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <!-- Overlay: dims content when sidebar drawer is open on mobile -->
+  <div id="sidebarOverlay" class="sidebar-overlay" onclick="toggleSidebar()"></div>
   <script src="/app.js"></script>
 </body>
 </html>

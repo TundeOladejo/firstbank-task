@@ -338,18 +338,92 @@ tbody tr:hover { background: var(--line-s); }
 .toast .t-detail { font-size: 12.5px; color: #94a3b8; }
 
 /* ── Responsive ───────────────────────────────────────────────────────── */
-@media (max-width: 1024px) {
-  .transfer-layout { grid-template-columns: 1fr; }
-  .transfer-info   { grid-template-columns: repeat(3, 1fr); display: grid; }
+
+/* Hamburger button — hidden on desktop */
+.topbar-menu-btn {
+  display: none; background: none; border: none; cursor: pointer;
+  color: var(--ink-2); padding: 6px; border-radius: var(--radius-s);
+  align-items: center; justify-content: center;
 }
-@media (max-width: 860px) {
-  .two-col { grid-template-columns: 1fr; }
+.topbar-menu-btn:hover { background: var(--line-s); }
+.topbar-menu-btn svg  { width: 20px; height: 20px; }
+
+/* Overlay behind the drawer */
+.sidebar-overlay {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.45); z-index: 99;
+}
+.sidebar-overlay.open { display: block; }
+
+@media (max-width: 768px) {
+  /* Hamburger visible */
+  .topbar-menu-btn { display: flex; }
+
+  /* Sidebar becomes a fixed drawer, off-screen by default */
+  .sidebar {
+    position: fixed; top: 0; left: 0; height: 100vh;
+    z-index: 100; transform: translateX(-100%);
+    transition: transform .22s cubic-bezier(.4,0,.2,1);
+    box-shadow: 4px 0 24px rgba(0,0,0,.25);
+  }
+  .sidebar.open { transform: translateX(0); }
+
+  /* Main stretches full width */
+  .main { margin-left: 0; width: 100%; }
+
+  /* Topbar */
+  .topbar { padding: 0 16px; gap: 10px; }
+  .topbar-sub { display: none; }
+  .topbar-left { gap: 8px; }
+
+  /* KPI: 2 columns */
   .kpi-row { grid-template-columns: 1fr 1fr; }
+
+  /* Two-col & transfer: single column */
+  .two-col { grid-template-columns: 1fr; }
+  .transfer-layout { grid-template-columns: 1fr; }
+  .transfer-info { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* Content padding */
+  .content { padding: 16px 14px 40px; }
+
+  /* Field rows collapse */
+  .field-row { grid-template-columns: 1fr; }
 }
-@media (max-width: 680px) {
-  .shell { flex-direction: column; }
-  .sidebar { width: 100%; height: auto; position: static; }
-  .kpi-row, .field-row { grid-template-columns: 1fr; }
+
+@media (max-width: 480px) {
+  /* KPI: single column */
+  .kpi-row { grid-template-columns: 1fr; }
+
+  /* Transfer info: single column */
   .transfer-info { grid-template-columns: 1fr; }
-  .content { padding: 16px; }
+
+  /* Transfer flow: tighter */
+  .transfer-flow { padding: 10px 12px; }
+  .tf-arrow svg  { width: 50px; }
+
+  /* Full tables (4+ columns) scroll horizontally — compact 3-col tables don't need min-width */
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table { min-width: 420px; }
+  /* Dashboard wallet table is compact (3 cols) — let it fill naturally without scrolling */
+  #dashWalletList .table-wrap { overflow-x: visible; }
+  #dashWalletList table        { min-width: unset; }
+
+  /* Sign-in card */
+  .signin-card { padding: 24px 18px; }
+
+  /* Key row: stack */
+  .key-row { flex-wrap: wrap; }
+  .key-row .field-input { min-width: 0; }
+
+  /* Topbar title smaller */
+  .topbar-title { font-size: 15px; }
+
+  /* Status badge shorter */
+  .status-badge { padding: 4px 10px; font-size: 11px; }
+}
+
+@media (min-width: 769px) {
+  /* Ensure sidebar is always visible on desktop regardless of JS state */
+  .sidebar { transform: none !important; position: sticky; }
 }
