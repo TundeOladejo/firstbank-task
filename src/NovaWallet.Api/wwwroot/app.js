@@ -128,8 +128,8 @@ function setAuthed(subject) {
   $("accountMeta").textContent = "Signed in";
   $("signOutBtn").hidden = false;
   const pill = $("statusPill");
-  pill.className = "pill pill-live";
-  pill.innerHTML = `<span class="dot"></span> ${subject}`;
+  pill.className = "status-badge status-on";
+  pill.innerHTML = `<span class="status-dot"></span> ${subject}`;
 }
 
 function signOut() {
@@ -140,16 +140,17 @@ function signOut() {
   Object.keys(SECTIONS).forEach((s) => { $(`s-${s}`).hidden = true; });
   $("authBanner").hidden = false;
   $("accountName").textContent = "Not signed in";
-  $("accountMeta").textContent = "Get a token to start";
+  $("accountMeta").textContent = "Authenticate to continue";
   $("signOutBtn").hidden = true;
-  $("statusPill").className = "pill pill-muted";
-  $("statusPill").innerHTML = `<span class="dot"></span> Signed out`;
+  $("statusPill").className = "status-badge status-off";
+  $("statusPill").innerHTML = `<span class="status-dot"></span> Signed out`;
   $("pageTitle").textContent = "Dashboard";
   $("pageSub").textContent   = SECTIONS.dashboard.sub;
   PERSISTED_FIELDS.forEach((id) => { const el = $(id); if (el) el.value = ""; });
   $("balOut").innerHTML = "";
   $("historyOut").innerHTML = "";
-  $("walletListOut").innerHTML = `<p class="empty">Click Refresh to load wallets.</p>`;
+  $("walletListOut").innerHTML = `<p class="empty-state">Loading…</p>`;
+  $("dashWalletList").innerHTML = `<p class="empty-state">Loading wallets…</p>`;
   newKey();
 }
 
@@ -172,44 +173,54 @@ async function refreshDashboard() {
     $("statTransfer").textContent     = koboToNaira(lt.amountKobo);
     $("statTransferFoot").textContent = lt.replayed ? "replayed (idempotent)" : "completed";
   }
+  // Also populate the dashboard wallet list
+  loadDashboardWallets();
+}
+
+async function loadDashboardWallets() {
+  if (!token) return;
+  const out = $("dashWalletList");
+  try {
+    const { data } = await api("GET", "/api/wallets?pageSize=20");
+    if (!data.items.length) { out.innerHTML = `<p class="empty-state">No wallets yet.</p>`; return; }
+    out.innerHTML = renderWalletTable(data.items, data.totalCount, true);
+  } catch { out.innerHTML = `<p class="empty-state">Could not load wallets.</p>`; }
 }
 
 // ── wallet list ───────────────────────────────────────────────────────────────
 
 let _selectedWalletId = null;
 
+function renderWalletTable(items, totalCount, compact = false) {
+  return `<table>
+    <thead><tr>
+      <th>Customer</th>
+      <th>Wallet ID</th>
+      <th>Balance</th>
+      ${compact ? "" : "<th>Created</th>"}
+    </tr></thead>
+    <tbody>
+      ${items.map((w) => `
+        <tr class="wallet-row${w.walletId === _selectedWalletId ? " selected" : ""}"
+            onclick="selectWallet('${w.walletId}', '${w.customerId}')">
+          <td><span class="cust-name">${w.customerId}</span></td>
+          <td><span class="wid-mono" title="${w.walletId}">${w.walletId.slice(0,8)}…</span></td>
+          <td class="${w.balanceKobo > 0 ? "amt-pos" : ""}">${koboToNaira(w.balanceKobo)}</td>
+          ${compact ? "" : `<td style="color:var(--ink-3);font-size:12px">${new Date(w.createdAt).toLocaleString()}</td>`}
+        </tr>`).join("")}
+    </tbody>
+  </table>
+  ${!compact ? `<p style="font-size:12px;color:var(--ink-3);margin-top:8px;padding:0 2px">${totalCount} wallet${totalCount!==1?"s":""} · click a row to select it for all forms</p>` : ""}`;
+}
+
 async function loadWallets() {
   if (!requireToken()) return;
   const out = $("walletListOut");
-  out.innerHTML = `<p class="empty">Loading…</p>`;
+  out.innerHTML = `<p class="empty-state">Loading…</p>`;
   try {
     const { data } = await api("GET", "/api/wallets?pageSize=100");
-    if (!data.items.length) {
-      out.innerHTML = `<p class="empty">No wallets yet — create one below.</p>`;
-      return;
-    }
-    out.innerHTML = `
-      <table>
-        <thead><tr>
-          <th>Customer ID</th>
-          <th>Wallet ID</th>
-          <th>Currency</th>
-          <th>Balance</th>
-          <th>Created</th>
-        </tr></thead>
-        <tbody>
-          ${data.items.map((w) => `
-            <tr class="wallet-row${w.walletId === _selectedWalletId ? " selected" : ""}"
-                onclick="selectWallet('${w.walletId}', '${w.customerId}')">
-              <td><strong>${w.customerId}</strong></td>
-              <td><code title="${w.walletId}">${w.walletId.slice(0, 8)}…</code></td>
-              <td><span class="badge-ngn">${w.currency}</span></td>
-              <td class="amt-pos">${koboToNaira(w.balanceKobo)}</td>
-              <td>${new Date(w.createdAt).toLocaleString()}</td>
-            </tr>`).join("")}
-        </tbody>
-      </table>
-      <p class="hint" style="margin-top:8px">${data.totalCount} wallet${data.totalCount !== 1 ? "s" : ""} total · click a row to select it</p>`;
+    if (!data.items.length) { out.innerHTML = `<p class="empty-state">No wallets yet — create one.</p>`; return; }
+    out.innerHTML = renderWalletTable(data.items, data.totalCount);
   } catch (e) { out.innerHTML = ""; toast("err", "Failed to load wallets", e.message); }
 }
 
@@ -271,8 +282,8 @@ async function getBalance() {
     const id       = $("balWallet").value.trim();
     const { data } = await api("GET", `/api/wallets/${id}/balance`);
     $("balOut").innerHTML =
-      `<span class="amt">${koboToNaira(data.balanceKobo)}</span> ` +
-      `<span class="cur">${data.currency} · ${data.balanceKobo} kobo</span>`;
+      `<span class="bal-amount">${koboToNaira(data.balanceKobo)}</span>` +
+      `<span class="bal-kobo">${data.currency} · ${data.balanceKobo.toLocaleString()} kobo</span>`;
     saveSession();
   } catch (e) { $("balOut").innerHTML = ""; toast("err", "Balance failed", e.message); }
 }
@@ -290,10 +301,25 @@ async function credit() {
     // Refresh balance and wallet list to show updated figures
     if ($("balWallet").value.trim() === id) getBalance();
     loadWallets();
+    loadDashboardWallets();
   } catch (e) { toast("err", "Credit failed", e.message); }
 }
 
 function newKey() { $("tfKey").value = crypto.randomUUID(); }
+
+function copyKey() {
+  const k = $("tfKey").value;
+  if (k) navigator.clipboard.writeText(k).then(() => toast("ok", "Copied", k.slice(0,8) + "…"));
+}
+
+function updateTfDisplay() {
+  const from = $("tfFrom").value.trim();
+  const to   = $("tfTo").value.trim();
+  const amt  = nairaToKobo($("tfAmount").value);
+  $("tfFromDisplay").textContent = from ? from.slice(0,8) + "…" : "—";
+  $("tfToDisplay").textContent   = to   ? to.slice(0,8)   + "…" : "—";
+  $("tfAmountDisplay").textContent = amt && amt > 0n ? koboToNaira(amt) : "₦0.00";
+}
 
 async function transfer() {
   if (!requireToken()) return;
@@ -314,7 +340,8 @@ async function transfer() {
       replayed ? "Replayed (idempotent)" : "Transfer complete",
       `${koboToNaira(kobo)} · new source balance ${koboToNaira(data.fromBalanceKobo)}`);
     if ($("balWallet").value.trim() === $("tfFrom").value.trim()) getBalance();
-    loadWallets();  // refresh balances in the list
+    loadWallets();
+    loadDashboardWallets();
   } catch (e) { toast("err", "Transfer rejected", e.message); }
 }
 
@@ -327,8 +354,8 @@ function switchTab(tab) {
 
 function typeChip(type) {
   const map = {
-    Credit:      ["chip-credit", "#i-down"],
-    TransferIn:  ["chip-in",    "#i-down"],
+    Credit:      ["chip-credit", "#i-credit"],
+    TransferIn:  ["chip-in",    "#i-credit"],
     TransferOut: ["chip-out",   "#i-send"],
   };
   const [cls, icon] = map[type] || ["", "#i-history"];
