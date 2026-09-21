@@ -38,7 +38,10 @@ public class LedgerService(
 
     public async Task<BalanceResponse> GetBalanceAsync(Guid walletId, CancellationToken ct)
     {
-        var wallet = await db.Wallets.AsNoTracking().FirstOrDefaultAsync(w => w.Id == walletId, ct)
+        var wallet = await db.Wallets.AsNoTracking()
+            .Where(w => w.Id == walletId)
+            .OrderBy(w => w.Id)
+            .FirstOrDefaultAsync(ct)
             ?? throw LedgerException.NotFound($"Wallet {walletId} not found.");
         return new BalanceResponse(wallet.Id, wallet.Currency, wallet.BalanceKobo);
     }
@@ -90,7 +93,9 @@ public class LedgerService(
         if (idempotencyKey is not null)
         {
             var existing = await db.IdempotencyRecords.AsNoTracking()
-                .FirstOrDefaultAsync(r => r.Key == idempotencyKey, ct);
+                .Where(r => r.Key == idempotencyKey)
+                .OrderBy(r => r.CreatedAt)
+                .FirstOrDefaultAsync(ct);
             if (existing is not null)
                 return (ReplayTransfer(existing, requestHash!), replayed: true);
         }
@@ -189,7 +194,9 @@ public class LedgerService(
                 // A concurrent request with the same key may have committed first. If so, roll back
                 // our transfer and return the winner's stored response — the money moved exactly once.
                 var winner = await db.IdempotencyRecords.AsNoTracking()
-                    .FirstOrDefaultAsync(r => r.Key == idempotencyKey, ct);
+                    .Where(r => r.Key == idempotencyKey)
+                    .OrderBy(r => r.CreatedAt)
+                    .FirstOrDefaultAsync(ct);
                 if (winner is null)
                     throw; // Not an idempotency race; surface the original failure.
 
@@ -272,9 +279,12 @@ public class LedgerService(
                 .FromSqlRaw(
                     "SELECT \"Id\", \"CustomerId\", \"Currency\", \"BalanceKobo\", \"CreatedAt\", xmin " +
                     "FROM wallets WHERE \"Id\" = {0} FOR UPDATE", walletId)
-                .FirstOrDefaultAsync(ct);
+                .SingleOrDefaultAsync(ct);
         }
-        return await db.Wallets.FirstOrDefaultAsync(w => w.Id == walletId, ct);
+        return await db.Wallets
+            .Where(w => w.Id == walletId)
+            .OrderBy(w => w.Id)
+            .FirstOrDefaultAsync(ct);
     }
 
     private void AppendTransaction(Guid walletId, TransactionType type, long signedAmount, long balanceAfter, Guid? transferId, Guid? counterparty, string? reference)
