@@ -1,53 +1,59 @@
 // NovaWallet console — thin client over the same public /api endpoints.
-// No secrets, no logic duplication: the browser just calls the API and renders results.
-// State (token, wallet IDs, last transfer) is persisted to localStorage so a page
-// refresh restores the session automatically.
+// State is persisted to localStorage so a page refresh restores the session automatically.
 
 let token = null;
 let historyTab = "stmt";
+let _subject = null;   // current signed-in subject — source of truth for saving
 
 const SECTIONS = {
   dashboard: { title: "Dashboard", sub: "Overview of your NovaWallet activity" },
-  wallets:   { title: "Wallets",   sub: "Create wallets, credit funds, and check balances" },
+  wallets:   { title: "Wallets",   sub: "All wallets · create · credit · check balance" },
   transfer:  { title: "Transfer",  sub: "Move funds atomically between wallets" },
   history:   { title: "History",   sub: "Statement and append-only audit trail" },
 };
 
-// Fields whose values are saved to localStorage and restored on reload.
-const PERSISTED_FIELDS = ["balWallet", "crWallet", "tfFrom", "tfTo", "hsWallet", "tfKey",
-                          "cwCustomer", "crAmount", "tfAmount", "authSubject", "authCustomer"];
+// Input field ids whose values survive a page refresh via localStorage.
+const PERSISTED_FIELDS = [
+  "balWallet", "crWallet", "tfFrom", "tfTo", "hsWallet", "tfKey",
+  "cwCustomer", "crAmount", "tfAmount", "authSubject", "authCustomer",
+];
 
 const STORAGE_KEY = "nw_session";
-
 const $ = (id) => document.getElementById(id);
 
-// ---- persistence helpers ----
+// ── persistence ──────────────────────────────────────────────────────────────
 
 function saveSession() {
   const fields = {};
   PERSISTED_FIELDS.forEach((id) => { const el = $(id); if (el) fields[id] = el.value; });
-  const session = {
-    token,
-    subject: $("accountName")?.textContent,
-    fields,
-    lastTransfer: window._lastTransfer || null,
-  };
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(session)); } catch { /* storage full */ }
+  if (!_subject) return;   // never save a session when no one is signed in
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      subject:      _subject,
+      customerId:   $("authCustomer")?.value || "",
+      fields,
+      lastTransfer: window._lastTransfer || null,
+    }));
+  } catch { /* storage full */ }
 }
 
 function loadSession() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw);
-  } catch { return null; }
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null"); }
+  catch { return null; }
 }
 
-function clearSession() {
-  localStorage.removeItem(STORAGE_KEY);
+function clearSession() { localStorage.removeItem(STORAGE_KEY); }
+
+// Restore all input field values from a saved session object.
+function restoreFields(session) {
+  if (!session?.fields) return;
+  Object.entries(session.fields).forEach(([id, value]) => {
+    const el = $(id);
+    if (el && value) el.value = value;
+  });
 }
 
-// ---- money helpers (string/BigInt math, no floating point) ----
+// ── money helpers (BigInt — no floats ever) ──────────────────────────────────
 
 function nairaToKobo(naira) {
   const s = String(naira).trim();
@@ -63,18 +69,23 @@ function koboToNaira(kobo) {
   return `${sign}₦${(abs / 100n).toLocaleString("en-NG")}.${(abs % 100n).toString().padStart(2, "0")}`;
 }
 
+// ── toast ─────────────────────────────────────────────────────────────────────
+
 function toast(kind, title, detail) {
   const t = $("toast");
   t.className = `toast show ${kind}`;
-  t.innerHTML = `<span class="t-title">${title}</span>${detail ? `<span class="t-detail">${detail}</span>` : ""}`;
-  clearTimeout(toast._timer);
-  toast._timer = setTimeout(() => (t.className = "toast"), 4200);
+  t.innerHTML = `<span class="t-title">${title}</span>` +
+                (detail ? `<span class="t-detail">${detail}</span>` : "");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => (t.className = "toast"), 4200);
 }
 
-async function api(method, path, body, extraHeaders = {}) {
-  const headers = { "Content-Type": "application/json", ...extraHeaders };
+// ── api helper ───────────────────────────────────────────────────────────────
+
+async function api(method, path, body, extra = {}) {
+  const headers = { "Content-Type": "application/json", ...extra };
   if (token) headers["Authorization"] = `Bearer ${token}`;
-  const res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+  const res  = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
   const text = await res.text();
   let data = null;
   try { data = text ? JSON.parse(text) : null; } catch { data = text; }
@@ -93,7 +104,7 @@ function requireToken() {
   return true;
 }
 
-// ---- navigation ----
+// ── navigation ───────────────────────────────────────────────────────────────
 
 function go(section) {
   Object.keys(SECTIONS).forEach((s) => { $(`s-${s}`).hidden = s !== section; });
@@ -101,13 +112,18 @@ function go(section) {
     b.classList.toggle("active", b.dataset.section === section));
   $("pageTitle").textContent = SECTIONS[section].title;
   $("pageSub").textContent   = SECTIONS[section].sub;
-  if (section === "dashboard") refreshDashboard();
+  // Wait for auth to settle before triggering data loads.
+  _authReady.then(() => {
+    if (section === "dashboard") refreshDashboard();
+    if (section === "wallets")   loadWallets();
+  });
   saveSession();
 }
 
 function setAuthed(subject) {
+  _subject = subject;
   $("authBanner").hidden = true;
-  Object.keys(SECTIONS).forEach((s) => { if (s === "dashboard") $(`s-${s}`).hidden = false; });
+  Object.keys(SECTIONS).forEach((s) => { $(`s-${s}`).hidden = s !== "dashboard"; });
   $("accountName").textContent = subject;
   $("accountMeta").textContent = "Signed in";
   $("signOutBtn").hidden = false;
@@ -118,6 +134,7 @@ function setAuthed(subject) {
 
 function signOut() {
   token = null;
+  _subject = null;
   window._lastTransfer = null;
   clearSession();
   Object.keys(SECTIONS).forEach((s) => { $(`s-${s}`).hidden = true; });
@@ -125,19 +142,18 @@ function signOut() {
   $("accountName").textContent = "Not signed in";
   $("accountMeta").textContent = "Get a token to start";
   $("signOutBtn").hidden = true;
-  const pill = $("statusPill");
-  pill.className = "pill pill-muted";
-  pill.innerHTML = `<span class="dot"></span> Signed out`;
+  $("statusPill").className = "pill pill-muted";
+  $("statusPill").innerHTML = `<span class="dot"></span> Signed out`;
   $("pageTitle").textContent = "Dashboard";
   $("pageSub").textContent   = SECTIONS.dashboard.sub;
-  // Clear all wallet ID fields
   PERSISTED_FIELDS.forEach((id) => { const el = $(id); if (el) el.value = ""; });
-  newKey();
   $("balOut").innerHTML = "";
   $("historyOut").innerHTML = "";
+  $("walletListOut").innerHTML = `<p class="empty">Click Refresh to load wallets.</p>`;
+  newKey();
 }
 
-// ---- dashboard ----
+// ── dashboard ────────────────────────────────────────────────────────────────
 
 async function refreshDashboard() {
   const id = ($("balWallet").value || $("tfFrom").value || "").trim();
@@ -158,12 +174,72 @@ async function refreshDashboard() {
   }
 }
 
-// ---- actions ----
+// ── wallet list ───────────────────────────────────────────────────────────────
+
+let _selectedWalletId = null;
+
+async function loadWallets() {
+  if (!requireToken()) return;
+  const out = $("walletListOut");
+  out.innerHTML = `<p class="empty">Loading…</p>`;
+  try {
+    const { data } = await api("GET", "/api/wallets?pageSize=100");
+    if (!data.items.length) {
+      out.innerHTML = `<p class="empty">No wallets yet — create one below.</p>`;
+      return;
+    }
+    out.innerHTML = `
+      <table>
+        <thead><tr>
+          <th>Customer ID</th>
+          <th>Wallet ID</th>
+          <th>Currency</th>
+          <th>Balance</th>
+          <th>Created</th>
+        </tr></thead>
+        <tbody>
+          ${data.items.map((w) => `
+            <tr class="wallet-row${w.walletId === _selectedWalletId ? " selected" : ""}"
+                onclick="selectWallet('${w.walletId}', '${w.customerId}')">
+              <td><strong>${w.customerId}</strong></td>
+              <td><code title="${w.walletId}">${w.walletId.slice(0, 8)}…</code></td>
+              <td><span class="badge-ngn">${w.currency}</span></td>
+              <td class="amt-pos">${koboToNaira(w.balanceKobo)}</td>
+              <td>${new Date(w.createdAt).toLocaleString()}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+      <p class="hint" style="margin-top:8px">${data.totalCount} wallet${data.totalCount !== 1 ? "s" : ""} total · click a row to select it</p>`;
+  } catch (e) { out.innerHTML = ""; toast("err", "Failed to load wallets", e.message); }
+}
+
+// Clicking a wallet row fills it into all relevant fields everywhere in the UI.
+function selectWallet(walletId, customerId) {
+  _selectedWalletId = walletId;
+  // Update selection highlight
+  document.querySelectorAll(".wallet-row").forEach((r) =>
+    r.classList.toggle("selected", r.querySelector("code")?.title === walletId));
+  // Fill into all wallet ID fields
+  const targets = ["balWallet", "crWallet", "hsWallet"];
+  targets.forEach((id) => { $(id).value = walletId; });
+  // Fill tfFrom if empty, tfTo otherwise
+  if (!$("tfFrom").value || $("tfFrom").value === walletId) {
+    $("tfFrom").value = walletId;
+  } else if (!$("tfTo").value) {
+    $("tfTo").value = walletId;
+  }
+  saveSession();
+  // Immediately show the balance in the balance panel
+  getBalance();
+  toast("ok", `${customerId} selected`, walletId.slice(0, 8) + "…");
+}
+
+// ── actions ───────────────────────────────────────────────────────────────────
 
 async function getToken() {
   try {
-    const subject    = $("authSubject").value || "demo";
-    const customerId = $("authCustomer").value || null;
+    const subject    = $("authSubject").value.trim() || "demo";
+    const customerId = $("authCustomer").value.trim() || null;
     const { data }   = await api("POST", "/api/auth/token", { subject, customerId });
     token = data.accessToken;
     setAuthed(subject);
@@ -177,9 +253,14 @@ async function createWallet() {
   if (!requireToken()) return;
   try {
     const { data } = await api("POST", "/api/wallets", { customerId: $("cwCustomer").value });
-    ["balWallet", "crWallet", "tfFrom", "hsWallet"].forEach((id) => { if (!$(id).value) $(id).value = data.walletId; });
-    if (!$("tfTo").value && $("tfFrom").value !== data.walletId) $("tfTo").value = data.walletId;
+    // Auto-fill empty wallet fields with the new wallet
+    ["balWallet", "crWallet", "hsWallet"].forEach((id) => { if (!$(id).value) $(id).value = data.walletId; });
+    if (!$("tfFrom").value) $("tfFrom").value = data.walletId;
+    else if (!$("tfTo").value && $("tfTo").value !== data.walletId) $("tfTo").value = data.walletId;
+    _selectedWalletId = data.walletId;
     saveSession();
+    // Refresh the wallet list to show the new entry
+    loadWallets();
     toast("ok", "Wallet created", data.walletId);
   } catch (e) { toast("err", "Create failed", e.message); }
 }
@@ -189,7 +270,9 @@ async function getBalance() {
   try {
     const id       = $("balWallet").value.trim();
     const { data } = await api("GET", `/api/wallets/${id}/balance`);
-    $("balOut").innerHTML = `<span class="amt">${koboToNaira(data.balanceKobo)}</span> <span class="cur">${data.currency} · ${data.balanceKobo} kobo</span>`;
+    $("balOut").innerHTML =
+      `<span class="amt">${koboToNaira(data.balanceKobo)}</span> ` +
+      `<span class="cur">${data.currency} · ${data.balanceKobo} kobo</span>`;
     saveSession();
   } catch (e) { $("balOut").innerHTML = ""; toast("err", "Balance failed", e.message); }
 }
@@ -204,14 +287,13 @@ async function credit() {
       { amountKobo: Number(kobo), reference: $("crRef").value || null });
     toast("ok", "Credited", `${koboToNaira(kobo)} to wallet`);
     saveSession();
+    // Refresh balance and wallet list to show updated figures
     if ($("balWallet").value.trim() === id) getBalance();
+    loadWallets();
   } catch (e) { toast("err", "Credit failed", e.message); }
 }
 
-function newKey() {
-  $("tfKey").value = crypto.randomUUID();
-  saveSession();
-}
+function newKey() { $("tfKey").value = crypto.randomUUID(); }
 
 async function transfer() {
   if (!requireToken()) return;
@@ -225,7 +307,6 @@ async function transfer() {
       amountKobo:   Number(kobo),
       reference:    $("tfRef").value || null,
     }, { "Idempotency-Key": $("tfKey").value });
-
     const replayed = headers.get("Idempotent-Replayed") === "true";
     window._lastTransfer = { amountKobo: kobo.toString(), replayed };
     saveSession();
@@ -233,6 +314,7 @@ async function transfer() {
       replayed ? "Replayed (idempotent)" : "Transfer complete",
       `${koboToNaira(kobo)} · new source balance ${koboToNaira(data.fromBalanceKobo)}`);
     if ($("balWallet").value.trim() === $("tfFrom").value.trim()) getBalance();
+    loadWallets();  // refresh balances in the list
   } catch (e) { toast("err", "Transfer rejected", e.message); }
 }
 
@@ -291,40 +373,51 @@ async function loadHistory() {
   } catch (e) { out.innerHTML = ""; toast("err", "Load failed", e.message); }
 }
 
-// ---- restore session on page load ----
+// ── restore session on page load ─────────────────────────────────────────────
+// _authReady resolves once we know whether the user is signed in or not.
+// Functions that need auth (loadWallets, refreshDashboard, etc.) await it
+// before doing anything, so they never race against restoreSession().
+
+let _resolveAuth;
+const _authReady = new Promise((resolve) => { _resolveAuth = resolve; });
+
 async function restoreSession() {
   const session = loadSession();
-  if (!session?.token) { newKey(); return; }
 
-  // Restore field values immediately.
-  if (session.fields) {
-    Object.entries(session.fields).forEach(([id, value]) => {
-      const el = $(id);
-      if (el && value) el.value = value;
-    });
+  // Step 1 — restore field values synchronously so inputs are populated immediately
+  // on first render, before any async work starts.
+  restoreFields(session);
+  if (session?.lastTransfer) window._lastTransfer = session.lastTransfer;
+
+  if (!session?.subject) {
+    // No saved session — show sign-in screen and signal auth is settled (not signed in).
+    newKey();
+    _resolveAuth(false);
+    return;
   }
-  if (session.lastTransfer) window._lastTransfer = session.lastTransfer;
 
-  // Re-issue a fresh token with the same subject so we're never stuck with an expired one.
-  // This is safe because the token endpoint is unauthenticated — just POST the same subject again.
   try {
-    const subject    = session.subject || session.fields?.authSubject || "demo";
-    const customerId = session.fields?.authCustomer || null;
+    // Step 2 — re-issue a fresh token with the saved subject.
+    // The token endpoint is unauthenticated, so this always works while the server is up.
+    const subject    = session.subject || "demo";
+    const customerId = session.customerId || session.fields?.authCustomer || null;
     const { data }   = await api("POST", "/api/auth/token",
       { subject, customerId: customerId || undefined });
     token = data.accessToken;
-    // Update stored token immediately.
-    session.token = token;
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(session)); } catch {}
 
+    // Step 3 — now that token is set, update the UI.
+    // Fields are already in the DOM from Step 1, so refreshDashboard() can read them.
     setAuthed(subject);
     go("dashboard");
     toast("ok", "Session restored", "Picked up where you left off.");
-  } catch (e) {
-    // Server not up yet — show sign-in screen.
+    _resolveAuth(true);
+  } catch {
+    // Server not reachable — fall back to sign-in screen.
     token = null;
     newKey();
+    _resolveAuth(false);
   }
 }
 
+newKey();
 restoreSession();

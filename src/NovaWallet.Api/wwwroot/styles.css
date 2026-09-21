@@ -199,6 +199,14 @@ td.amt-neg { color: var(--err); font-weight: 700; }
 .chip-out { background: #fdeae7; color: var(--err); }
 .empty { color: var(--muted); padding: 18px 0; font-style: italic; }
 
+/* Wallet list — clickable rows */
+.wallet-row { cursor: pointer; transition: background .1s; }
+.wallet-row:hover { background: #f0f4ff; }
+.wallet-row.selected { background: #e8eefb; }
+.wallet-row td:first-child { font-family: monospace; font-size: 12px; color: var(--muted); }
+.badge-ngn { font-size: 11px; font-weight: 700; background: #eaf0ff; color: var(--navy-700);
+  padding: 2px 8px; border-radius: 999px; }
+
 /* ============ Toast ============ */
 .toast {
   position: fixed; right: 24px; bottom: 24px; max-width: 380px;

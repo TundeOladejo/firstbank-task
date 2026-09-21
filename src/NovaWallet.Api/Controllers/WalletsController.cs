@@ -12,6 +12,13 @@ namespace NovaWallet.Api.Controllers;
 [Produces("application/json")]
 public class WalletsController(LedgerService ledger) : ControllerBase
 {
+    /// <summary>List all wallets, newest first.</summary>
+    [HttpGet]
+    [ProducesResponseType(typeof(PagedResponse<WalletResponse>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PagedResponse<WalletResponse>>> List(
+        [FromQuery] int page = 1, [FromQuery] int pageSize = 50, CancellationToken ct = default)
+        => Ok(await ledger.ListWalletsAsync(page, pageSize, ct));
+
     /// <summary>Create a wallet for a customer. Starting balance is zero.</summary>
     [HttpPost]
     [ProducesResponseType(typeof(WalletResponse), StatusCodes.Status201Created)]

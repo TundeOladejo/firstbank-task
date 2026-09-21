@@ -124,7 +124,20 @@
 
         <!-- ===== Wallets ===== -->
         <section id="s-wallets" class="section" hidden>
-          <div class="panel-grid">
+          <!-- Wallet list (loaded from API) -->
+          <div class="panel span-2" style="grid-column:span 2">
+            <div class="panel-head">
+              <span class="panel-ic ic-navy"><svg class="ic"><use href="#i-wallet"/></svg></span>
+              <h3>All wallets</h3>
+              <button class="btn btn-ghost" style="margin-left:auto" onclick="loadWallets()"><svg class="ic"><use href="#i-search"/></svg> Refresh</button>
+            </div>
+            <div id="walletListOut" class="table-wrap">
+              <p class="empty">Click Refresh to load wallets.</p>
+            </div>
+            <p class="hint">Click any row to select that wallet across all forms.</p>
+          </div>
+
+          <div class="panel-grid" style="display:contents">
             <div class="panel">
               <div class="panel-head"><span class="panel-ic ic-navy"><svg class="ic"><use href="#i-plus"/></svg></span><h3>Create wallet</h3></div>
               <label>Customer id<input id="cwCustomer" type="text" value="cust-1" /></label>
@@ -134,7 +147,7 @@
 
             <div class="panel">
               <div class="panel-head"><span class="panel-ic ic-navy"><svg class="ic"><use href="#i-search"/></svg></span><h3>Balance</h3></div>
-              <label>Wallet id<input id="balWallet" type="text" placeholder="wallet uuid" /></label>
+              <label>Wallet id<input id="balWallet" type="text" placeholder="wallet uuid or click a row above" /></label>
               <button class="btn btn-ghost" onclick="getBalance()"><svg class="ic"><use href="#i-search"/></svg> Check balance</button>
               <div id="balOut" class="balance-out"></div>
             </div>

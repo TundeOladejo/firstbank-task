@@ -46,6 +46,23 @@ public class LedgerService(
         return new BalanceResponse(wallet.Id, wallet.Currency, wallet.BalanceKobo);
     }
 
+    public async Task<PagedResponse<WalletResponse>> ListWalletsAsync(int page, int pageSize, CancellationToken ct)
+    {
+        page     = Math.Max(1, page);
+        pageSize = Math.Clamp(pageSize, 1, 200);
+
+        var query = db.Wallets.AsNoTracking();
+        var total = await query.LongCountAsync(ct);
+        var items = await query
+            .OrderByDescending(w => w.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(w => new WalletResponse(w.Id, w.CustomerId, w.Currency, w.BalanceKobo, w.CreatedAt))
+            .ToListAsync(ct);
+
+        return new PagedResponse<WalletResponse>(items, page, pageSize, total);
+    }
+
     public async Task<WalletResponse> CreditAsync(Guid walletId, long amountKobo, string? reference, string? correlationId, CancellationToken ct)
     {
         if (amountKobo <= 0)
